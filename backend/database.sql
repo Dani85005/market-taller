@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS usuarios (
+  id SERIAL PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  rol VARCHAR(20),
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS productos (
+  id SERIAL PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  descripcion TEXT,
+  precio NUMERIC(10,2) NOT NULL,
+  imagen_url VARCHAR(255),
+  vendedor_id INT REFERENCES usuarios(id),
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pedidos (
+  id SERIAL PRIMARY KEY,
+  producto_id INT REFERENCES productos(id),
+  usuario_id INT REFERENCES usuarios(id),
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
