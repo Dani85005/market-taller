@@ -1,0 +1,292 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{titlesec}
+ 
+\definecolor{codebg}{RGB}{245,245,245}
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible
+}
+ 
+\title{Sistema de Comercio Electrónico con Arquitectura Hexagonal \\ \large Usuario, Producto y Pedido -- Backend Node.js + PostgreSQL, Frontend React}
+\author{}
+\date{\today}
+ 
+\begin{document}
+ 
+\maketitle
+\tableofcontents
+\newpage
+ 
+\section{Objetivo General}
+ 
+Construir la arquitectura conceptual y técnica de un sistema de comercio electrónico, modelando la base de datos y desarrollando operaciones CRUD completas para tres entidades interconectadas (Usuario, Producto, Pedido), con énfasis en la seguridad de credenciales y la separación estricta de capas mediante arquitectura hexagonal.
+ 
+\section{Diagrama Arquitectónico}
+ 
+El backend está organizado en cuatro capas siguiendo el patrón \textbf{Hexagonal (Ports \& Adapters)}, aplicado de forma repetida a las tres entidades del dominio, más un módulo transversal de Captcha.
+ 
+\subsection{Capas del sistema}
+ 
+\begin{longtable}{p{3cm}p{6cm}p{5cm}}
+\toprule
+\textbf{Capa} & \textbf{Responsabilidad} & \textbf{No conoce} \\
+\midrule
+\endhead
+Domain & Entidades y reglas de negocio puras (validaciones, estados) & HTTP, SQL, Express, PostgreSQL \\
+Application & Casos de uso (registrar, aprobar, listar) que orquestan el dominio & Detalles de PostgreSQL o Express \\
+Infrastructure & Adaptadores de salida: implementan los puertos con PostgreSQL real & Reglas de negocio \\
+Interfaces & Adaptadores de entrada: rutas Express que traducen HTTP en llamadas a casos de uso & Cómo se guardan los datos \\
+\bottomrule
+\end{longtable}
+ 
+\subsection{Flujo de dependencias}
+ 
+\begin{verbatim}
+Cliente (React)
+     |
+     v
+Interfaces (Controllers: user, producto, pedido, captcha)
+     |
+     v
+Application (Services: UserService, ProductoService,
+             PedidoService, CaptchaService)
+     |
+     v
+Domain (Entidades: User, Producto, Pedido, Captcha
+        + Puertos: *RepositoryPort)
+     ^
+     | implementa
+     |
+Infrastructure (Adapters: *RepositoryAdapter -> PostgreSQL
+                CaptchaStoreAdapter -> memoria)
+\end{verbatim}
+ 
+La inyección de dependencias ocurre en \texttt{server.js} (composition root): ahí se instancian los adaptadores concretos y se inyectan en los servicios de aplicación, que a su vez se inyectan en los controladores HTTP.
+ 
+\section{Modelado de la Base de Datos (PostgreSQL)}
+ 
+\subsection{Tabla usuarios}
+\begin{lstlisting}[language=SQL]
+CREATE TABLE usuarios (
+  id SERIAL PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  rol VARCHAR(20),
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+\end{lstlisting}
+ 
+\subsection{Tabla productos}
+\begin{lstlisting}[language=SQL]
+CREATE TABLE productos (
+  id SERIAL PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  descripcion TEXT,
+  precio NUMERIC(10,2) NOT NULL,
+  imagen_url VARCHAR(255),
+  vendedor_id INT REFERENCES usuarios(id),
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+\end{lstlisting}
+ 
+\subsection{Tabla pedidos}
+\begin{lstlisting}[language=SQL]
+CREATE TABLE pedidos (
+  id SERIAL PRIMARY KEY,
+  producto_id INT REFERENCES productos(id),
+  usuario_id INT REFERENCES usuarios(id),
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+\end{lstlisting}
+ 
+\textbf{Nota sobre imágenes:} el campo \texttt{imagen\_url} almacena únicamente una referencia (URL) a la imagen del producto; el archivo binario nunca se guarda en la base de datos, cumpliendo con el requerimiento de la actividad.
+ 
+\section{Especificación de Endpoints}
+ 
+\subsection{Captcha}
+\begin{longtable}{p{1.5cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Método} & \textbf{Ruta} & \textbf{Descripción} \\
+\midrule
+\endhead
+GET & /captcha & Genera un nuevo desafío de 10 imágenes SVG (una por carácter) \\
+\bottomrule
+\end{longtable}
+ 
+\subsection{Usuario}
+\begin{longtable}{p{1.5cm}p{4cm}p{7cm}}
+\toprule
+\textbf{Método} & \textbf{Ruta} & \textbf{Descripción} \\
+\midrule
+\endhead
+POST & /usuarios/registro & Registra un usuario nuevo (queda \texttt{pendiente}, sin rol); requiere captcha \\
+POST & /usuarios/login & Inicia sesión; requiere estar \texttt{aprobado} y tener rol asignado; requiere captcha \\
+GET & /usuarios & Lista todos los usuarios (panel admin) \\
+GET & /usuarios/pendientes & Lista usuarios en estado \texttt{pendiente} \\
+PUT & /usuarios/:id/aprobar & El admin asigna rol y aprueba o rechaza \\
+DELETE & /usuarios/:id & Elimina un usuario \\
+\bottomrule
+\end{longtable}
+ 
+\subsection{Producto}
+\begin{longtable}{p{1.5cm}p{4cm}p{7cm}}
+\toprule
+\textbf{Método} & \textbf{Ruta} & \textbf{Descripción} \\
+\midrule
+\endhead
+POST & /productos & Registra un producto (rol \texttt{producto}); queda \texttt{pendiente} \\
+GET & /productos & Lista todos los productos (panel admin) \\
+GET & /productos/aprobados & Lista solo productos aprobados (vista Marketplace, rol \texttt{pedido}) \\
+GET & /productos/pendientes & Lista productos pendientes de aprobación \\
+PUT & /productos/:id & Actualiza datos del producto (dueño) \\
+PUT & /productos/:id/aprobar & El admin aprueba o rechaza el producto \\
+DELETE & /productos/:id & Elimina un producto \\
+\bottomrule
+\end{longtable}
+ 
+\subsection{Pedido}
+\begin{longtable}{p{1.5cm}p{4cm}p{7cm}}
+\toprule
+\textbf{Método} & \textbf{Ruta} & \textbf{Descripción} \\
+\midrule
+\endhead
+POST & /pedidos & Crea un pedido (interés sobre un producto del catálogo) \\
+GET & /pedidos & Lista todos los pedidos \\
+PUT & /pedidos/:id & Actualiza estado (confirmar / cancelar) \\
+DELETE & /pedidos/:id & Elimina un pedido \\
+\bottomrule
+\end{longtable}
+ 
+\section{Estructura del Repositorio}
+ 
+\subsection{Backend (market-service/)}
+\begin{lstlisting}
+market-service/
+  src/
+    domain/
+      user.js, userRepositoryPort.js
+      producto.js, productoRepositoryPort.js
+      pedido.js, pedidoRepositoryPort.js
+      captcha.js, captchaRepositoryPort.js
+    application/
+      userService.js, productoService.js
+      pedidoService.js, captchaService.js
+    infrastructure/
+      db.js
+      userRepositoryAdapter.js
+      productoRepositoryAdapter.js
+      pedidoRepositoryAdapter.js
+      captchaStoreAdapter.js
+    interfaces/
+      userController.js, productoController.js
+      pedidoController.js, captchaController.js
+    server.js
+  database.sql
+  package.json
+  .env
+\end{lstlisting}
+ 
+\subsection{Frontend (market-frontend/)}
+\begin{lstlisting}
+market-frontend/
+  src/
+    App.jsx                (login, registro, captcha, routing por rol)
+    DashboardAdmin.jsx      (aprobar usuarios y productos)
+    DashboardProducto.jsx   (CRUD de productos propios)
+    DashboardPedido.jsx     (catalogo tipo marketplace)
+    main.jsx
+  vite.config.js
+  package.json
+\end{lstlisting}
+ 
+\section{Guía de Despliegue en WSL}
+ 
+\subsection{Prerrequisitos (una sola vez por máquina)}
+\begin{lstlisting}[language=bash]
+sudo apt update && sudo apt upgrade -y
+ 
+# Node.js 20 LTS
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+ 
+# PostgreSQL
+sudo apt install -y postgresql postgresql-contrib
+ 
+# Git y utilidades
+sudo apt install -y git unzip curl
+\end{lstlisting}
+ 
+\subsection{Cada vez que se abre WSL}
+PostgreSQL no arranca automáticamente en WSL:
+\begin{lstlisting}[language=bash]
+sudo service postgresql start
+\end{lstlisting}
+ 
+\subsection{Configuración de la base de datos (una sola vez)}
+\begin{lstlisting}[language=bash]
+sudo -u postgres psql
+\end{lstlisting}
+\begin{lstlisting}[language=SQL]
+CREATE USER apiuser WITH PASSWORD 'tu_password';
+CREATE DATABASE market_db OWNER apiuser;
+GRANT ALL PRIVILEGES ON DATABASE market_db TO apiuser;
+\end{lstlisting}
+\begin{lstlisting}[language=bash]
+cd market-service
+psql -U apiuser -d market_db -h localhost -f database.sql
+\end{lstlisting}
+ 
+\subsection{Levantar el Backend}
+\begin{lstlisting}[language=bash]
+cd market-service
+npm install
+# crear .env con DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, PORT
+node src/server.js
+\end{lstlisting}
+Queda escuchando en \texttt{http://localhost:4000}.
+ 
+\subsection{Levantar el Frontend}
+En otra terminal:
+\begin{lstlisting}[language=bash]
+cd market-frontend
+npm install
+npm run dev
+\end{lstlisting}
+Queda escuchando en \texttt{http://localhost:5173}.
+ 
+\subsection{Consumo en el navegador}
+Como WSL comparte red con Windows, se accede directamente desde el navegador en:
+\texttt{http://localhost:5173}. El frontend realiza peticiones \texttt{fetch} al backend en el puerto 4000, habilitado mediante CORS.
+ 
+\section{Notas de Seguridad Implementadas}
+ 
+\begin{itemize}
+  \item \textbf{Contraseñas}: nunca se almacenan en texto plano; se cifran con \texttt{bcrypt} (10 salt rounds) antes de insertarse en PostgreSQL.
+  \item \textbf{Captcha}: obligatorio en login y registro, de un solo uso, expira a los 5 minutos, almacenado en memoria (no en la base de datos) por tratarse de un dato temporal. Compuesto por 10 imágenes SVG generadas dinámicamente, una por carácter, con rotación y color aleatorios.
+  \item \textbf{Aprobación de acceso}: ningún usuario puede iniciar sesión hasta que un administrador le asigna un rol (\texttt{admin}, \texttt{producto} o \texttt{pedido}) y aprueba su cuenta.
+  \item \textbf{Aprobación de productos}: ningún producto es visible en el catálogo público hasta que un administrador lo aprueba.
+  \item \textbf{Variables sensibles}: las credenciales de conexión a la base de datos se mantienen en un archivo \texttt{.env}, excluido del control de versiones mediante \texttt{.gitignore}.
+\end{itemize}
+ 
+\section{Conclusiones}
+ 
+El sistema implementa exitosamente las tres entidades solicitadas (Usuario, Producto, Pedido) bajo arquitectura hexagonal, con separación estricta entre reglas de negocio (dominio), orquestación de casos de uso (aplicación), acceso a datos (infraestructura) y exposición HTTP (interfaces). El frontend en React consume estos endpoints y presenta una interfaz diferenciada según el rol del usuario autenticado, cumpliendo con el flujo de aprobación administrativa requerido por la actividad.
+ 
+\end{document}
+ 
