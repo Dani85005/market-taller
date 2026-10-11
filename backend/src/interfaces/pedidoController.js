@@ -6,19 +6,33 @@ const express = require('express');
 function crearPedidoRouter(pedidoService) {
   const router = express.Router();
 
-  // POST /pedidos -> crear un pedido (rol "pedido" solicita un producto)
+  // POST /pedidos -> registra pedido "pendiente_de_pago" y dispara los correos
   router.post('/', async (req, res) => {
     try {
-      const { productoId, usuarioId } = req.body;
+      const { productoId, usuarioId, cantidad } = req.body;
 
       if (!productoId || !usuarioId) {
         return res.status(400).json({ error: 'productoId y usuarioId son obligatorios' });
       }
 
-      const pedido = await pedidoService.crearPedido({ productoId, usuarioId });
+      const pedido = await pedidoService.crearPedido({
+        productoId,
+        usuarioId,
+        cantidad: cantidad ?? 1
+      });
       return res.status(201).json(pedido);
     } catch (error) {
-      if (error.message.includes('obligatorio')) {
+      if (error.codigo === 'NO_ENCONTRADO') {
+        return res.status(404).json({ error: error.message });
+      }
+      if (error.codigo === 'PRODUCTO_NO_DISPONIBLE') {
+        return res.status(409).json({ error: error.message });
+      }
+      if (
+        error.message.includes('cantidad') ||
+        error.message.includes('asociado') ||
+        error.message.includes('estado debe')
+      ) {
         return res.status(400).json({ error: error.message });
       }
       console.error('Error al crear pedido:', error);
@@ -37,7 +51,7 @@ function crearPedidoRouter(pedidoService) {
     }
   });
 
-  // PUT /pedidos/:id -> actualizar estado (confirmar/cancelar)
+  // PUT /pedidos/:id -> actualizar estado (pagado / confirmado / cancelado)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -52,6 +66,9 @@ function crearPedidoRouter(pedidoService) {
     } catch (error) {
       if (error.codigo === 'NO_ENCONTRADO') {
         return res.status(404).json({ error: error.message });
+      }
+      if (error.message.includes('estado debe')) {
+        return res.status(400).json({ error: error.message });
       }
       console.error('Error al actualizar pedido:', error);
       return res.status(500).json({ error: 'Error interno del servidor' });

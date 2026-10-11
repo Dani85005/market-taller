@@ -1,19 +1,23 @@
 // domain/pedido.js
-// Entidad de dominio: representa un Pedido (interés/solicitud sobre un producto).
+// Entidad de dominio: Pedido. Nace en estado "pendiente_de_pago"
 
-const ESTADOS_VALIDOS = ['pendiente', 'confirmado', 'cancelado'];
+const ESTADOS_VALIDOS = ['pendiente_de_pago', 'pagado', 'confirmado', 'cancelado'];
 
 class Pedido {
   constructor({
     id = null,
     productoId,
     usuarioId,
-    estado = 'pendiente',
+    cantidad = 1,
+    total = 0,
+    estado = 'pendiente_de_pago',
     creadoEn = null
   }) {
     this.id = id;
     this.productoId = productoId;
     this.usuarioId = usuarioId;
+    this.cantidad = Number(cantidad);
+    this.total = Number(total);
     this.estado = estado;
     this.creadoEn = creadoEn;
 
@@ -29,6 +33,10 @@ class Pedido {
       throw new Error('El pedido debe estar asociado a un usuario');
     }
 
+    if (!Number.isInteger(this.cantidad) || this.cantidad < 1) {
+      throw new Error('La cantidad debe ser un entero mayor o igual a 1');
+    }
+
     if (!ESTADOS_VALIDOS.includes(this.estado)) {
       throw new Error(`El estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}`);
     }
@@ -39,6 +47,8 @@ class Pedido {
       id: this.id,
       productoId: this.productoId,
       usuarioId: this.usuarioId,
+      cantidad: this.cantidad,
+      total: this.total,
       estado: this.estado,
       creadoEn: this.creadoEn
     };

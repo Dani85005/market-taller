@@ -1,5 +1,5 @@
 // infrastructure/pedidoRepositoryAdapter.js
-// Adaptador: implementación CONCRETA del puerto pedidoRepositoryPort usando PostgreSQL.
+// Adaptador: implementa PedidoRepositoryPort con PostgreSQL.
 
 const PedidoRepositoryPort = require('../domain/pedidoRepositoryPort');
 const { Pedido } = require('../domain/pedido');
@@ -10,6 +10,8 @@ function filaAPedido(fila) {
     id: fila.id,
     productoId: fila.producto_id,
     usuarioId: fila.usuario_id,
+    cantidad: fila.cantidad,
+    total: Number(fila.total),
     estado: fila.estado,
     creadoEn: fila.creado_en
   });
@@ -18,10 +20,10 @@ function filaAPedido(fila) {
 class PedidoRepositoryAdapter extends PedidoRepositoryPort {
   async guardar(pedido) {
     const resultado = await pool.query(
-      `INSERT INTO pedidos (producto_id, usuario_id, estado)
-       VALUES ($1, $2, $3)
+      `INSERT INTO pedidos (producto_id, usuario_id, cantidad, total, estado)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [pedido.productoId, pedido.usuarioId, pedido.estado]
+      [pedido.productoId, pedido.usuarioId, pedido.cantidad, pedido.total, pedido.estado]
     );
     return filaAPedido(resultado.rows[0]);
   }

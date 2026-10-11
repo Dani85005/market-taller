@@ -1,5 +1,5 @@
 // src/server.js
-// Composition root: aquí se conectan todas las piezas de la arquitectura hexagonal.
+// Composition root: aquí se conectan puertos y adaptadores.
 
 require('dotenv').config();
 const express = require('express');
@@ -25,24 +25,39 @@ const PedidoRepositoryAdapter = require('./infrastructure/pedidoRepositoryAdapte
 const PedidoService = require('./application/pedidoService');
 const crearPedidoRouter = require('./interfaces/pedidoController');
 
-// Inyección de dependencias - Captcha
+// Correo (puerto de salida + adaptador)
+const NodemailAdapter = require('./infrastructure/nodemailAdapter');
+
+// Captcha
 const captchaRepository = new CaptchaStoreAdapter();
 const captchaService = new CaptchaService(captchaRepository);
 const captchaRouter = crearCaptchaRouter(captchaService);
 
-// Inyección de dependencias - Usuario (recibe captchaService también)
+// Usuario
 const userRepository = new UserRepositoryAdapter();
 const userService = new UserService(userRepository, captchaService);
 const userRouter = crearUserRouter(userService);
 
-// Inyección de dependencias - Producto
+// Producto
 const productoRepository = new ProductoRepositoryAdapter();
 const productoService = new ProductoService(productoRepository);
 const productoRouter = crearProductoRouter(productoService);
 
-// Inyección de dependencias - Pedido
+// Pedido (recibe el emailService INYECTADO: no sabe que existe Nodemailer)
 const pedidoRepository = new PedidoRepositoryAdapter();
-const pedidoService = new PedidoService(pedidoRepository);
+const emailService = new NodemailAdapter();
+const pedidoService = new PedidoService({
+  pedidoRepository,
+  productoRepository,
+  userRepository,
+  emailService,
+  adminEmail: process.env.ADMIN_EMAIL,
+  datosBancarios: {
+    banco: process.env.BANCO_NOMBRE || 'Banco de ejemplo',
+    titular: process.env.BANCO_TITULAR || 'Market Taller',
+    clabe: process.env.BANCO_CLABE || '000000000000000000'
+  }
+});
 const pedidoRouter = crearPedidoRouter(pedidoService);
 
 const app = express();

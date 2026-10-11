@@ -2,9 +2,17 @@ import { useState, useEffect } from "react";
 
 const API = "http://localhost:4000";
 
+const moneda = (n) =>
+  Number(n).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
 function DashboardPedido({ usuario }) {
   const [productos, setProductos] = useState([]);
   const [cargando, setCargando] = useState(true);
+
+  const [seleccionado, setSeleccionado] = useState(null);
+  const [cantidad, setCantidad] = useState(1);
+  const [enviando, setEnviando] = useState(false);
+  const [confirmacion, setConfirmacion] = useState(null);
 
   const cargarProductos = async () => {
     setCargando(true);
@@ -23,13 +31,150 @@ function DashboardPedido({ usuario }) {
     cargarProductos();
   }, []);
 
+  const total = seleccionado ? Number(seleccionado.precio) * Number(cantidad || 0) : 0;
+
+  const abrirCheckout = (producto) => {
+    setSeleccionado(producto);
+    setCantidad(1);
+    setConfirmacion(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const confirmarPedido = async (e) => {
+    e.preventDefault();
+    setEnviando(true);
+
+    try {
+      const respuesta = await fetch(`${API}/pedidos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productoId: seleccionado.id,
+          usuarioId: usuario.id,
+          cantidad: Number(cantidad),
+        }),
+      });
+
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        alert(datos.error || "No se pudo registrar el pedido");
+        return;
+      }
+
+      setConfirmacion({ pedido: datos, producto: seleccionado });
+      setSeleccionado(null);
+    } catch (error) {
+      alert("Error de conexión con el servidor");
+      console.error(error);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   if (cargando) return <p>Cargando catálogo...</p>;
 
   return (
     <div>
+      {confirmacion && (
+        <div style={estilos.confirmacion}>
+          <h3 style={{ margin: "0 0 8px" }}>
+            Pedido #{confirmacion.pedido.id} registrado
+          </h3>
+          <p style={{ margin: "0 0 4px" }}>
+            Estado: <b>Pendiente de pago</b> · Total:{" "}
+            <b>{moneda(confirmacion.pedido.total)}</b>
+          </p>
+          {confirmacion.pedido.notificaciones?.cliente ? (
+            <p style={{ margin: 0 }}>
+              Te enviamos un correo a <b>{usuario.email}</b> con el desglose y
+              los datos bancarios para completar tu pago.
+            </p>
+          ) : (
+            <p style={{ margin: 0, color: "#b45309" }}>
+              Tu pedido se guardó, pero no pudimos enviar el correo. Contacta al
+              administrador con la referencia PED-{confirmacion.pedido.id}.
+            </p>
+          )}
+        </div>
+      )}
+
+      {seleccionado && (
+        <form onSubmit={confirmarPedido} style={estilos.checkout}>
+          <h2 style={{ margin: "0 0 10px", color: "#333" }}>Checkout</h2>
+
+          <div style={estilos.checkoutFila}>
+            {seleccionado.imagenUrl && (
+              <img
+                src={seleccionado.imagenUrl}
+                alt={seleccionado.nombre}
+                style={estilos.miniatura}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = "https://placehold.co/90x90?text=Sin+imagen";
+                }}
+              />
+            )}
+            <div style={{ flex: 1 }}>
+              <b>{seleccionado.nombre}</b>
+              <p style={{ margin: "4px 0", color: "#555", fontSize: "14px" }}>
+                {seleccionado.descripcion}
+              </p>
+              <span>Precio unitario: {moneda(seleccionado.precio)}</span>
+            </div>
+          </div>
+
+          <label style={estilos.etiqueta}>
+            Cantidad
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={cantidad}
+              onChange={(e) => setCantidad(e.target.value)}
+              style={estilos.inputCantidad}
+              required
+            />
+          </label>
+
+          <table style={estilos.resumen}>
+            <tbody>
+              <tr>
+                <td>Subtotal</td>
+                <td style={{ textAlign: "right" }}>{moneda(total)}</td>
+              </tr>
+              <tr>
+                <td>
+                  <b>Total a pagar</b>
+                </td>
+                <td style={{ textAlign: "right" }}>
+                  <b>{moneda(total)}</b>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p style={{ fontSize: "13px", color: "#666" }}>
+            No se cobra en línea: al confirmar, tu pedido queda como{" "}
+            <b>Pendiente de pago</b> y recibirás por correo los datos bancarios.
+          </p>
+
+          <button type="submit" style={estilos.btnConfirmar} disabled={enviando}>
+            {enviando ? "Registrando..." : "Confirmar pedido"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSeleccionado(null)}
+            style={estilos.btnCancelar}
+          >
+            Cancelar
+          </button>
+        </form>
+      )}
+
       <h2 style={estilos.subtitle}>Catálogo de productos ({productos.length})</h2>
       <p style={{ color: "#888", fontSize: "14px", marginTop: "-5px" }}>
-        Aquí puedes consultar los productos disponibles con sus características y precio.
+        Elige un producto para generar tu pedido.
       </p>
 
       {productos.length === 0 ? (
@@ -44,9 +189,9 @@ function DashboardPedido({ usuario }) {
                   alt={p.nombre}
                   style={estilos.imagen}
                   onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = "https://placehold.co/220x140?text=Sin+imagen";
-                }}
+                    e.target.onerror = null;
+                    e.target.src = "https://placehold.co/220x140?text=Sin+imagen";
+                  }}
                 />
               ) : (
                 <div style={estilos.sinImagen}>Sin imagen</div>
@@ -55,7 +200,10 @@ function DashboardPedido({ usuario }) {
               <p style={{ margin: "0 0 8px", color: "#555", fontSize: "14px" }}>
                 {p.descripcion || "Sin descripción"}
               </p>
-              <p style={estilos.precio}>${p.precio}</p>
+              <p style={estilos.precio}>{moneda(p.precio)}</p>
+              <button style={estilos.btnComprar} onClick={() => abrirCheckout(p)}>
+                Comprar
+              </button>
             </div>
           ))}
         </div>
@@ -79,12 +227,7 @@ const estilos = {
     padding: "12px",
     boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
   },
-  imagen: {
-    width: "100%",
-    height: "140px",
-    objectFit: "cover",
-    borderRadius: "6px",
-  },
+  imagen: { width: "100%", height: "140px", objectFit: "cover", borderRadius: "6px" },
   sinImagen: {
     width: "100%",
     height: "140px",
@@ -96,11 +239,59 @@ const estilos = {
     color: "#999",
     fontSize: "13px",
   },
-  precio: {
-    margin: 0,
-    fontWeight: "bold",
-    fontSize: "16px",
-    color: "#007bff",
+  precio: { margin: "0 0 10px", fontWeight: "bold", fontSize: "16px", color: "#007bff" },
+  btnComprar: {
+    padding: "8px 14px",
+    background: "#28a745",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+  },
+  checkout: {
+    border: "2px solid #007bff",
+    borderRadius: "10px",
+    padding: "16px",
+    marginBottom: "20px",
+    background: "#f8fbff",
+  },
+  checkoutFila: { display: "flex", gap: "12px", alignItems: "center", marginBottom: "12px" },
+  miniatura: { width: "90px", height: "90px", objectFit: "cover", borderRadius: "6px" },
+  etiqueta: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" },
+  inputCantidad: {
+    width: "80px",
+    padding: "8px",
+    borderRadius: "6px",
+    border: "1px solid #ccc",
+    fontSize: "14px",
+  },
+  resumen: { width: "100%", marginBottom: "10px", borderTop: "1px solid #ddd" },
+  btnConfirmar: {
+    padding: "10px 20px",
+    background: "#007bff",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    marginRight: "8px",
+  },
+  btnCancelar: {
+    padding: "10px 20px",
+    background: "#6c757d",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+  },
+  confirmacion: {
+    background: "#ecfdf5",
+    border: "1px solid #34d399",
+    borderRadius: "8px",
+    padding: "14px",
+    marginBottom: "16px",
   },
 };
 
