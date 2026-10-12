@@ -1,7 +1,7 @@
 // domain/pedido.js
 // Entidad de dominio: Pedido. Nace en estado "pendiente_de_pago"
 
-const ESTADOS_VALIDOS = ['pendiente_de_pago', 'pagado', 'confirmado', 'cancelado'];
+const ESTADOS_VALIDOS = ['pendiente_de_pago', 'pagado', 'confirmado', 'enviado', 'cancelado'];
 
 class Pedido {
   constructor({

@@ -24,6 +24,9 @@ const crearProductoRouter = require('./interfaces/productoController');
 const PedidoRepositoryAdapter = require('./infrastructure/pedidoRepositoryAdapter');
 const PedidoService = require('./application/pedidoService');
 const crearPedidoRouter = require('./interfaces/pedidoController');
+const AnalyticsRepositoryAdapter = require('./infrastructure/analyticsRepositoryAdapter');
+const AnalyticsService = require('./application/analyticsService');
+const crearAnalyticsRouter = require('./interfaces/analyticsController');
 
 // Correo (puerto de salida + adaptador)
 const NodemailAdapter = require('./infrastructure/nodemailAdapter');
@@ -64,10 +67,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const analyticsService = new AnalyticsService(new AnalyticsRepositoryAdapter());
 app.use('/captcha', captchaRouter);
 app.use('/usuarios', userRouter);
 app.use('/productos', productoRouter);
 app.use('/pedidos', pedidoRouter);
+app.use('/api/reportes', crearAnalyticsRouter(analyticsService));
 
 app.get('/', (req, res) => {
   res.json({ mensaje: 'API de Market (arquitectura hexagonal) funcionando correctamente' });

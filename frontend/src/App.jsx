@@ -1,5 +1,6 @@
 import { useState } from "react";
 import DashboardAdmin from "./DashboardAdmin";
+import PanelAdmin from "./PanelAdmin";
 import DashboardProducto from "./DashboardProducto";
 import DashboardPedido from "./DashboardPedido";
 
@@ -132,7 +133,7 @@ function App() {
           </button>
           <hr style={estilos.hr} />
 
-          {usuarioActual.rol === "admin" && <DashboardAdmin usuario={usuarioActual} />}
+          {usuarioActual.rol === "admin" && <PanelAdmin usuario={usuarioActual} />}
           {usuarioActual.rol === "producto" && <DashboardProducto usuario={usuarioActual} />}
           {usuarioActual.rol === "pedido" && <DashboardPedido usuario={usuarioActual} />}
         </div>
